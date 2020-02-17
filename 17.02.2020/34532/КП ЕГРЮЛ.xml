@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns1:FNSVipULRequest НомерДела="БН" ИдДок="22ED0D32-F3F5-0693-E050-A8C0D3C81091" xmlns:ns1="urn://x-artefacts-fns-vipul-tosmv-ru/311-14/4.0.5">
+	<ns1:ЗапросЮЛ>
+		<ns1:ИННЮЛ>5257045651</ns1:ИННЮЛ>
+	</ns1:ЗапросЮЛ>
+</ns1:FNSVipULRequest>
