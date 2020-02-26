@@ -1,0 +1,1422 @@
+<!-- Белгородский шаблон v1.0-->
+<!-- Белгородский шаблон v1.1 от 11.05.17: добавлены коды региона в запросе по умолчанию Addressee="031" и Regions="031" -->
+<!-- Белгородский шаблон v1.2 от 20.11.17: исправлены атрибуты тэга DocumentProcessed во втором запросе на подтверждение выдачи справки на шаге createRequest2 -->
+<!-- Белгородский шаблон v2.0 от 26.11.17: Переделка шаблонов под новый формат взаимодействия с МВД -->
+<!-- Белгородский шаблон v2.1 от 03.04.18: доработка расписки и шага формирования расписки по задаче https://rm.mfc.ru/issues/11119 -->
+<!-- Белгородский шаблон v2.2 от 17.04.18: поменял местами шагами оценки оказания услуги и отправки сведений в МВД https://rm.mfc.ru/issues/11524 -->
+	<Process xmlns="http://www.netvoxlab.ru/ReDoc/Workflow/Api"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xmlns:st="http://www.netvoxlab.ru/ReDoc/Workflow/SimpleTask"
+		 xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm"
+		 xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf"
+		 xmlns:stcc="http://www.netvoxlab.ru/ReDoc/Workflow/SimpleCallCenterTask"
+		 xmlns:tkmv="http://www.netvoxlab.ru/ReDoc/Workflow/TKMV"
+		 xmlns:sir="http://www.netvoxlab.ru/ReDoc/Workflow/RunUslugaInSIR"
+		 xmlns:indoc="http://www.netvoxlab.ru/ReDoc/Workflow/UploadDocsForm"
+		 xmlns:outdoc="http://www.netvoxlab.ru/ReDoc/Workflow/ResultNote"
+		 xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate"
+		 xmlns:send="http://www.netvoxlab.ru/ReDoc/Workflow/SendSoap"
+	  xmlns:rr="http://www.netvoxlab.ru/ReDoc/Workflow/Rosreestr"  ArchiveAfterEnd="true" EnableDuplicationSteps="true">
+	<Name>Оказание услуги</Name>
+	<Name>новый формат_Справка о наличии (отсутствии) судимости и (или) факта уголовного преследования либо о прекращении уголовного преследования, о нахождении в розыске СМЭВ 3.0</Name>
+	<Start Step="TemplateApplication"/>
+	<!--Загрузка документов из цели-->
+	<Step Name="TemplateApplication">
+		<Transition Title="Далее" To="info_talon" />
+		<Data xmlns:ch="http://www.netvoxlab.ru/ReDoc/Workflow/ApplicationTemplate" xsi:type="ch:ApplicationTemplateData" />
+	</Step>
+	
+   <Step Name="info_talon">
+		<Transition Title="Готово" To="Applicationstatus" />
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>DF_talon</df:IdRef>
+			<df:Title>Заполнить данные о талоне</df:Title>
+			<df:Duration>1440</df:Duration>
+			</Data>
+	</Step>
+	
+	<Step Name="Applicationstatus">
+        <Transition Title="Далее" To="MVDCriminal" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус Application Дело создано</fs:Description>
+                <fs:MfcServiceStatus>Application</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+	<!--Шаг записи в реестр ИС МДМ статус TicketIssued-->
+<Step Name="WriteToRequestRegister_TicketIssued">
+    <Transition Title="Передача данных в реестр ИС МДМ" To="WriteToRequestRegister_TicketCalled" />
+    <Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/WriteRegisterData" xsi:type="df:WriteRegisterData">
+        <df:RegistryKey>Nvx.ReDoc.FileStatusRegistryModule.Web.Model.Registry.FileStatusRegistryRecord</df:RegistryKey>
+        <df:Title>Передача данных в реестр ИС МДМ</df:Title>
+       <!-- <df:Restriction>Id==${serviceRecord.Id}</df:Restriction>-->
+        <df:Template>
+            <![CDATA[
+                <document>
+                    <RecId>${FileInfo.FileId}</RecId>
+                    <Number>${FileInfo.Identificator}</Number>
+                    <StatusId>TicketIssued</StatusId>
+#if ("$!TemplateApplication.IsMdmId" !="")<ServiceId>${TemplateApplication.IsMdmId}</ServiceId>#end
+                    <OrganizationId>${CompanyCode}</OrganizationId>
+                    #if ("$!DepartmentConfig.MfcUuid" !="")<MfcUuid>${DepartmentConfig.MfcUuid}</MfcUuid>#end
+                   <Attributes>{"ticket_issued_timestamp": "${info_talon.date_talon} ${info_talon.take_talon}"}</Attributes>                   
+                </document>]]>
+        </df:Template>
+        <df:VarDataOut>serviceRecord</df:VarDataOut>
+        <df:Duration>10</df:Duration>
+    </Data>
+</Step>
+
+
+ 
+	<!--Шаг записи в реестр ИС МДМ статус TicketCalled-->
+<Step Name="WriteToRequestRegister_TicketCalled">
+    <Transition Title="Передача данных в реестр ИС МДМ" To="WriteToRequestRegister_Ticket" />
+    <Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/WriteRegisterData" xsi:type="df:WriteRegisterData">
+        <df:RegistryKey>Nvx.ReDoc.FileStatusRegistryModule.Web.Model.Registry.FileStatusRegistryRecord</df:RegistryKey>
+        <df:Title>Передача данных в реестр ИС МДМ</df:Title>
+         <!-- <df:Restriction>Id==${serviceRecord.Id}</df:Restriction>-->
+        <df:Template>
+            <![CDATA[
+                <document>
+                    <RecId>${FileInfo.FileId}</RecId>
+                    <Number>${FileInfo.Identificator}</Number>
+                    <StatusId>TicketCalled</StatusId>
+#if ("$!TemplateApplication.IsMdmId" !="")<ServiceId>${TemplateApplication.IsMdmId}</ServiceId>#end        
+                    <OrganizationId>${CompanyCode}</OrganizationId>
+                    #if ("$!DepartmentConfig.MfcUuid" !="")<MfcUuid>${DepartmentConfig.MfcUuid}</MfcUuid>#end
+                   <Attributes>{"ticket_сalled_timestamp": "${info_talon.date_talon} ${info_talon.call_talon}","window_number": "${info_talon.num_okno}"}</Attributes>
+                </document>]]>
+        </df:Template>
+        <df:VarDataOut>serviceRecord</df:VarDataOut>
+        <df:Duration>10</df:Duration>
+    </Data>
+</Step>
+	<!--Шаг записи в реестр ИС МДМ статус Ticket-->
+<Step Name="WriteToRequestRegister_Ticket">
+    <Transition Title="Передача данных в реестр ИС МДМ" To="WriteToRequestRegister_ReceptionStarted" />
+    <Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/WriteRegisterData" xsi:type="df:WriteRegisterData">
+        <df:RegistryKey>Nvx.ReDoc.FileStatusRegistryModule.Web.Model.Registry.FileStatusRegistryRecord</df:RegistryKey>
+        <df:Title>Передача данных в реестр ИС МДМ</df:Title>
+        <!-- <df:Restriction>Id==${serviceRecord.Id}</df:Restriction>-->
+        <df:Template>
+            <![CDATA[
+                <document>
+                    <RecId>${FileInfo.FileId}</RecId>
+                    <Number>${FileInfo.Identificator}</Number>
+                    <StatusId>Ticket</StatusId> 
+#if ("$!TemplateApplication.IsMdmId" !="")<ServiceId>${TemplateApplication.IsMdmId}</ServiceId>#end
+                    <OrganizationId>${CompanyCode}</OrganizationId>
+                    #if ("$!DepartmentConfig.MfcUuid" !="")<MfcUuid>${DepartmentConfig.MfcUuid}</MfcUuid>#end
+                    <Attributes>{"ticket_name": "${info_talon.num_talon}"}</Attributes>
+                </document>]]>
+        </df:Template>
+        <df:VarDataOut>serviceRecord</df:VarDataOut>
+        <df:Duration>10</df:Duration>
+    </Data>
+</Step>
+	    <!--Шаг записи в реестр ИС МДМ статус ReceptionStarted-->
+<Step Name="WriteToRequestRegister_ReceptionStarted">
+    <Transition Title="Передача данных в реестр ИС МДМ" To="null" />
+    <Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/WriteRegisterData" xsi:type="df:WriteRegisterData">
+        <df:RegistryKey>Nvx.ReDoc.FileStatusRegistryModule.Web.Model.Registry.FileStatusRegistryRecord</df:RegistryKey>
+        <df:Title>Передача данных в реестр ИС МДМ</df:Title>
+         <!-- <df:Restriction>Id==${serviceRecord.Id}</df:Restriction>-->
+        <df:Template>
+            <![CDATA[
+                <document>
+                    <RecId>${FileInfo.FileId}</RecId>
+                    <Number>${FileInfo.Identificator}</Number>
+                    <StatusId>ReceptionStarted</StatusId>
+#if ("$!TemplateApplication.IsMdmId" !="")<ServiceId>${TemplateApplication.IsMdmId}</ServiceId>#end                    
+                    <OrganizationId>${CompanyCode}</OrganizationId>
+                    #if ("$!DepartmentConfig.MfcUuid" !="")<MfcUuid>${DepartmentConfig.MfcUuid}</MfcUuid>#end
+                    <Attributes>{"reception_started_timestamp": "${info_talon.date_talon} ${info_talon.start_talon}","window_numder": "${info_talon.num_okno}"}</Attributes>
+                </document>]]>
+        </df:Template>
+        <df:VarDataOut>serviceRecord</df:VarDataOut>
+        <df:Duration>10</df:Duration>
+    </Data>
+</Step>
+
+	<Step Name="MVDCriminal">
+		<Transition Title="Готово" To="vt1" />
+		<!-- поменять обратно на вт1-->
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>MVD_criminal_3.0_new</df:IdRef>
+			<df:Title>Заполнить форму запроса (МВД - судимость)</df:Title>
+			<df:Duration>480</df:Duration>
+		</Data>
+	</Step>
+
+	<Step Name="vt1">
+		<Transition Title="Далее" To="pdf1" />
+		<Data xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate" xsi:type="vt:VelocityTemplateData">
+			<vt:Template>
+				<![CDATA[#set($f="False")
+	<document>
+		<name_institution></name_institution>
+		<request>
+			<Requester>
+				<RequesterType>#if (${MVDCriminal.request.Requester.RequesterType})${MVDCriminal.request.Requester.RequesterType}#end</RequesterType>
+				<FamilyName>#if (${MVDCriminal.request.Requester.FamilyName})${MVDCriminal.request.Requester.FamilyName}#end</FamilyName>
+				<FirstName>#if (${MVDCriminal.request.Requester.FirstName})${MVDCriminal.request.Requester.FirstName}#end</FirstName>
+				<Patronymic>#if (${MVDCriminal.request.Requester.Patronymic})${MVDCriminal.request.Requester.Patronymic}#end</Patronymic>
+				<BirthDate>#if (${MVDCriminal.request.Requester.BirthDate})${MVDCriminal.request.Requester.BirthDate}#end</BirthDate>
+				<BirthPlace>#if (${MVDCriminal.request.Requester.BirthPlace})${MVDCriminal.request.Requester.BirthPlace}#end</BirthPlace>
+				<SNILS>#if (${MVDCriminal.request.Requester.SNILS})${MVDCriminal.request.Requester.SNILS}#end</SNILS>
+				<AddressType>#if (${MVDCriminal.request.Requester.AddressType})${MVDCriminal.request.Requester.AddressType}#end</AddressType>
+				<Address_200>#if (${MVDCriminal.request.Requester.Address_200})${MVDCriminal.request.Requester.Address_200}#end</Address_200>
+				<Address_201>#if (${MVDCriminal.request.Requester.Address_201})${MVDCriminal.request.Requester.Address_201}#end</Address_201>
+				<Element_54>#if (${MVDCriminal.request.Requester.Element_54})${MVDCriminal.request.Requester.Element_54}#end</Element_54>
+			</Requester>
+			<Person>
+				<FamilyName>#if (${MVDCriminal.request.Person.FamilyName})${MVDCriminal.request.Person.FamilyName}#end</FamilyName>
+				<FirstName>#if (${MVDCriminal.request.Person.FirstName})${MVDCriminal.request.Person.FirstName}#end</FirstName>
+				<Patronymic>#if (${MVDCriminal.request.Person.Patronymic})${MVDCriminal.request.Person.Patronymic}#end</Patronymic>
+				#if (${MVDCriminal.request.Person.PreviousNames})
+				#foreach($MVDCriminalrequestPersonPreviousNames in ${MVDCriminal.request.Person.PreviousNames})
+					<PreviousNames>
+						<FamilyName>#if (${MVDCriminalrequestPersonPreviousNames.FamilyName})${MVDCriminalrequestPersonPreviousNames.FamilyName}#end</FamilyName>
+						<FirstName>#if (${MVDCriminalrequestPersonPreviousNames.FirstName})${MVDCriminalrequestPersonPreviousNames.FirstName}#end</FirstName>
+						<Patronymic>#if (${MVDCriminalrequestPersonPreviousNames.Patronymic})${MVDCriminalrequestPersonPreviousNames.Patronymic}#end</Patronymic>
+					</PreviousNames>
+				#end#end
+				<BirthDate>
+					<Day>#if (${MVDCriminal.request.Person.BirthDate.Day})${MVDCriminal.request.Person.BirthDate.Day}#end</Day>
+					<Month>#if (${MVDCriminal.request.Person.BirthDate.Month})${MVDCriminal.request.Person.BirthDate.Month}#end</Month>
+					<Year>#if (${MVDCriminal.request.Person.BirthDate.Year})${MVDCriminal.request.Person.BirthDate.Year}#end</Year>
+				</BirthDate>
+				<BirthPlace>#if (${MVDCriminal.request.Person.BirthPlace})${MVDCriminal.request.Person.BirthPlace}#end</BirthPlace>
+				<AddressForm>#if (${MVDCriminal.request.Person.AddressForm_200.RegionCodeFias.RegionName})${MVDCriminal.request.Person.AddressForm_200.RegionCodeFias.RegionName}, #end#if (${MVDCriminal.request.Person.AddressForm_200.Address})${MVDCriminal.request.Person.AddressForm_200.Address}#end</AddressForm>
+				<IdentityDocument>
+					<TypeDoc>#if (${MVDCriminal.request.Person.IdentityDocument.TypeDoc})${MVDCriminal.request.Person.IdentityDocument.TypeDoc}#end</TypeDoc>
+					<SeriesPass>#if (${MVDCriminal.request.Person.IdentityDocument.SeriesPass})${MVDCriminal.request.Person.IdentityDocument.SeriesPass}#end</SeriesPass>
+					<SeriesFP>#if (${MVDCriminal.request.Person.IdentityDocument.SeriesFP})${MVDCriminal.request.Person.IdentityDocument.SeriesFP}#end</SeriesFP>
+					<SeriesRP>#if (${MVDCriminal.request.Person.IdentityDocument.SeriesRP})${MVDCriminal.request.Person.IdentityDocument.SeriesRP}#end</SeriesRP>
+					<NumberPass>#if (${MVDCriminal.request.Person.IdentityDocument.NumberPass})${MVDCriminal.request.Person.IdentityDocument.NumberPass}#end</NumberPass>
+					<NumberFP>#if (${MVDCriminal.request.Person.IdentityDocument.NumberFP})${MVDCriminal.request.Person.IdentityDocument.NumberFP}#end</NumberFP>
+					<NumberRP>#if (${MVDCriminal.request.Person.IdentityDocument.NumberRP})${MVDCriminal.request.Person.IdentityDocument.NumberRP}#end</NumberRP>
+					<IssueDate>#if (${MVDCriminal.request.Person.IdentityDocument.IssueDate})${MVDCriminal.request.Person.IdentityDocument.IssueDate}#end</IssueDate>
+					<Issuer>#if (${MVDCriminal.request.Person.IdentityDocument.Issuer})${MVDCriminal.request.Person.IdentityDocument.Issuer}#end</Issuer>
+				</IdentityDocument>
+				#if (${MVDCriminal.request.Person.AddressCollection_checkbox} == true)
+				#foreach($MVDCriminalrequestPersonAddressCollection in ${MVDCriminal.request.Person.AddressCollection})
+				<AddressCollection>
+					<Type>#if (${MVDCriminalrequestPersonAddressCollection.Type})${MVDCriminalrequestPersonAddressCollection.Type}#end</Type>
+					<RegionCodeFias>#if (${MVDCriminalrequestPersonAddressCollection.RegionCodeFias})${MVDCriminalrequestPersonAddressCollection.RegionCodeFias}#end</RegionCodeFias>
+					<Address>#if (${MVDCriminalrequestPersonAddressCollection.Address})${MVDCriminalrequestPersonAddressCollection.Address}#end</Address>
+				</AddressCollection>
+				#end#end
+				#if (${MVDCriminal.request.Person.AddressCollection_checkbox} == true)
+				#foreach($MVDCriminalrequestPersonAddressCollection in ${MVDCriminal.request.Person.AddressCollection})<Regions_txt>#if (${MVDCriminalrequestPersonAddressCollection.RegionCodeFias.RegionName})${MVDCriminalrequestPersonAddressCollection.RegionCodeFias.RegionName}#else${MVDCriminalrequestPersonAddressCollection.Address} #end</Regions_txt>#end#end
+				
+				<Exemplars>#if (${MVDCriminal.request.Person.Exemplars})${MVDCriminal.request.Person.Exemplars}#end</Exemplars>
+				<ReceiveIn>${DepartmentConfig.DepartmentName}</ReceiveIn>
+			</Person>
+			<DestinationAddress>#if (${MVDCriminal.request.DestinationAddress})${MVDCriminal.request.DestinationAddress}#end</DestinationAddress>
+			<Addressee>#if (${MVDCriminal.request.Addressee})${MVDCriminal.request.Addressee}#end</Addressee>
+			<RequestRegisteredAt>#if (${MVDCriminal.request.RequestRegisteredAt})${MVDCriminal.request.RequestRegisteredAt}#end</RequestRegisteredAt>
+			<RequestNumber>#if (${FileInfo.Identificator})${FileInfo.Identificator}#end</RequestNumber>
+			<Documents>
+				<pass>#if (${MVDCriminal.request.Documents.pass})${MVDCriminal.request.Documents.pass}#end</pass>
+				<dover>#if (${MVDCriminal.request.Documents.dover})${MVDCriminal.request.Documents.dover}#end</dover>
+				<rodstvo>#if (${MVDCriminal.request.Documents.rodstvo})${MVDCriminal.request.Documents.rodstvo}#end</rodstvo>
+				<opeka>#if (${MVDCriminal.request.Documents.opeka})${MVDCriminal.request.Documents.opeka}#end</opeka>
+				<perevodpass>#if (${MVDCriminal.request.Documents.perevodpass})${MVDCriminal.request.Documents.perevodpass}#end</perevodpass>
+			</Documents>
+			<ORGNAME>#if (${MVDCriminal.request.ORGNAME})${MVDCriminal.request.ORGNAME}#end</ORGNAME>
+			<FIO>#if (${MVDCriminal.request.FIO})${MVDCriminal.request.FIO}#end</FIO>
+			<DATE>#if (${MVDCriminal.request.DATE})${MVDCriminal.request.DATE}#end</DATE>
+			<Element_21>#if (${MVDCriminal.request.Element_21})${MVDCriminal.request.Element_21}#end</Element_21>
+		</request>
+	</document>]]>
+			</vt:Template>
+			<vt:SetVariable>XmlDataModel</vt:SetVariable>
+		</Data>
+	</Step>
+
+	<Step Name="pdf1">
+		<Transition To="document" Title="Далее" />
+		<Data xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf" xsi:type="pdf:GeneratePdfData">
+			<pdf:XSLTTemplateId>PDF_PLEA_31_MVD_Criminal</pdf:XSLTTemplateId>
+			<pdf:VarNameWithDataXML>XmlDataModel</pdf:VarNameWithDataXML>
+			<pdf:OutputAttach>Шаблон заявки.PDF</pdf:OutputAttach>
+		</Data>
+	</Step>
+
+	<Step Name="document">                                                                                                                              
+		<Transition Title="Собрать документы" To="ReceptionEnded" />                                                                                            
+		<Data IsAutoApplicationSkipped="true" xmlns:uf="http://www.netvoxlab.ru/ReDoc/Workflow/UploadDocsForm" xsi:type="uf:UploadDocsFormData">                                      
+			<uf:Title>Собрать документы</uf:Title>                                                                                                      
+			<uf:Duration>480</uf:Duration> 			
+			<uf:XMLTemplate>
+				<![CDATA[#set($f="False")
+<document>
+	<DepartmentPhone>#if (${TemplateApplication.DepartmentPhone})${TemplateApplication.DepartmentPhone}#end</DepartmentPhone>
+	<DepartmentName>#if (${DepartmentConfig.DepartmentName})${DepartmentConfig.DepartmentName}#end</DepartmentName>
+	<TypeBenefitType1>
+		<type_benefit>Выдача справки о наличии (отсутствии) судимости и (или) факта уголовного преследования либо о прекращении уголовного преследования</type_benefit>
+	</TypeBenefitType1>
+	<Gender>#if (${Customer.Gender})${Customer.Gender}#end</Gender>
+	<CustomerType>#if (${Customer.CustomerType})${Customer.CustomerType}#end</CustomerType>
+	<TypeApplInfo1>
+		<surname_applicant>#if (${Customer.Name.Last})${Customer.Name.Last}#end</surname_applicant>
+		<name_applicant>#if (${Customer.Name.First})${Customer.Name.First}#end</name_applicant>
+		<patronymic_applicant>#if (${Customer.Name.Middle})${Customer.Name.Middle}#end</patronymic_applicant>
+		<AgreeMKGU>#if (${form1.AgreeMKGU})${form1.AgreeMKGU}#else$f#end</AgreeMKGU>
+		<phone_applicant>#if (${form1.Application.Phone})${form1.Application.Phone}#end</phone_applicant>
+		<CompanyFullName>#if (${Customer.CompanyFullName})${Customer.CompanyFullName}#end</CompanyFullName>
+		<DirectorName>#if (${Customer.DirectorName.ToString()})${Customer.DirectorName.ToString()}#end</DirectorName>
+		##<TypeAddrInfo2>#if (${Customer.RegistrationAddress.ToString()})${Customer.RegistrationAddress.ToString()}#end</TypeAddrInfo2>
+		<RegistrationAddressCheck>#if (${form1.Application.RegistrationAddressCheck})${form1.Application.RegistrationAddressCheck}#else$f#end</RegistrationAddressCheck>
+		##if (${form1.Application.RegistrationAddressCheck} != 'True')
+			##<TypeAddrInfo2>#if (${form1.Application.RegistrationFiasAddress.PostalIndex})${form1.Application.RegistrationFiasAddress.PostalIndex}, #end#if (${form1.Application.RegistrationFiasAddress.RegionName})${form1.Application.RegistrationFiasAddress.RegionName}, #end#if (${form1.Application.RegistrationFiasAddress.StateName})${form1.Application.RegistrationFiasAddress.StateName}, #end#if (${form1.Application.RegistrationFiasAddress.CityName})${form1.Application.RegistrationFiasAddress.CityName}, #end#if (${form1.Application.RegistrationFiasAddress.StreetName})${form1.Application.RegistrationFiasAddress.StreetName}, #end#if (${form1.Application.RegistrationFiasAddress.House})д. ${form1.Application.RegistrationFiasAddress.House}, #end#if (${form1.Application.RegistrationFiasAddress.Corpuse})кор. ${form1.Application.RegistrationFiasAddress.Corpuse}, #end#if (${form1.Application.RegistrationFiasAddress.Building})стр. ${form1.Application.RegistrationFiasAddress.Building}, #end#if (${form1.Application.RegistrationFiasAddress.Flat})кв. ${form1.Application.RegistrationFiasAddress.Flat}, #end</TypeAddrInfo2>
+		##else
+			##<TypeAddrInfo2>#if (${form1.Application.RegistrationAddress})${form1.Application.RegistrationAddress}#end</TypeAddrInfo2>
+		##end
+		#if (${Customer.AddressRegistrationManual} == "True")<TypeAddrInfo2>#if (${Customer.RegistrationAddress.ToString()})${Customer.RegistrationAddress.ToString()}#end</TypeAddrInfo2>#else <TypeAddrInfo2>#if (${Customer.RegistrationFiasAddress.ToString()})${Customer.RegistrationFiasAddress.ToString()}#end</TypeAddrInfo2>#end
+	</TypeApplInfo1>
+	<Customers>
+		#foreach ($Customer in ${CustomerList})
+		#each
+			<Customer>
+				<Gender>#if (${Customer.Gender})${Customer.Gender}#end</Gender>
+				<CustomerType>#if (${Customer.CustomerType})${Customer.CustomerType}#end</CustomerType>
+				<surname_applicant>#if (${Customer.Name.Last})${Customer.Name.Last}#end</surname_applicant>
+				<name_applicant>#if (${Customer.Name.First})${Customer.Name.First}#end</name_applicant>
+				<patronymic_applicant>#if (${Customer.Name.Middle})${Customer.Name.Middle}#end</patronymic_applicant>
+				<CompanyFullName>#if (${Customer.CompanyFullName})${Customer.CompanyFullName}#end</CompanyFullName>
+				<DirectorName>#if (${Customer.DirectorName.ToString()})${Customer.DirectorName.ToString()}#end</DirectorName>
+				<TypeAddrInfo2>#if (${Customer.RegistrationAddress.ToString()})${Customer.RegistrationAddress.ToString()}#end</TypeAddrInfo2>
+			</Customer>
+		#end
+	</Customers>
+	<TypeResultInform1>
+		<fio_operator>#if (${CurrentUserName})${CurrentUserName}#end</fio_operator>
+	</TypeResultInform1>
+	<comment>#if (${UploadFormCommentary})${UploadFormCommentary}#end</comment>
+	<createdAt>${FileInfo.CreatedAt.ToString("O")}</createdAt>
+	<identificator>${FileInfo.Identificator}</identificator>
+	<attachments>
+		#foreach ($attach in $Attachs)
+		#each
+			<item size="${attach.CountPage}" isOrigin="${attach.IsOrigin}">${attach.Alias}</item>
+		#end
+	</attachments>
+	<date_now>#if (${DateNow})${DateNow}#end</date_now>
+	<ResultIssued>#if (${form1.ResultIssued})${form1.ResultIssued}#end</ResultIssued>
+</document>]]>
+			</uf:XMLTemplate>
+			<uf:XSLTIdRef>PDF_RECEIPT_IN_31_MVD_MFC</uf:XSLTIdRef>
+		</Data>
+	</Step> 
+	
+	<Step Name="ReceptionEnded">
+        <Transition Title="Далее" To="ApplicationQueued" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ReceptionEnded Факт приема документов к исполнению услуги</fs:Description>
+                <fs:MfcServiceStatus>ReceptionEnded</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+    
+      <Step Name="ApplicationQueued">
+        <Transition Title="Далее" To="createRequest" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicationQueued Начало оказания услуги</fs:Description>
+                <fs:MfcServiceStatus>ApplicationQueued</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+
+	<!-- формирование первичного запроса -->
+	<Step Name="createRequest">
+		<Transition Title="Далее" To="findRguCode" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<ns0:CriminalRecordRequest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ns0="urn://x-artefacts-mvd-gov-ru/giac-criminal-record/root/1.1.0" xmlns:smev="urn://x-artefacts-smev-gov-ru/supplementary/commons/1.2" Id="PERSONAL_SIGNATURE">
+    <ns0:Request Addressee="031" RequestRegisteredAt="${DateNow}" RequestNumber="${MVDCriminal.request.RequestNumber}" MFCRequestNumber="${FileInfo.Identificator}">
+        <ns0:Requester RequesterType="${MVDCriminal.request.Requester.RequesterType}">
+            <ns0:FullName>
+                <ns0:FamilyName>${MVDCriminal.request.Requester.FamilyName}</ns0:FamilyName>
+                <ns0:FirstName>${MVDCriminal.request.Requester.FirstName}</ns0:FirstName>
+                #if ("$!MVDCriminal.request.Requester.Patronymic" !="")<ns0:Patronymic>${MVDCriminal.request.Requester.Patronymic}</ns0:Patronymic>#end
+            </ns0:FullName>
+            <ns0:BirthDate>
+                <ns0:year>${MVDCriminal.request.Requester.BirthDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal.request.Requester.BirthDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal.request.Requester.BirthDate.ToString("%tdd")}</ns0:day>
+            </ns0:BirthDate>
+            <ns0:BirthPlace>${MVDCriminal.request.Requester.BirthPlace}</ns0:BirthPlace>
+            #if ("$!MVDCriminal.request.Requester.SNILS" !="")<ns0:SNILS>${MVDCriminal.request.Requester.SNILS.Replace("-","").Replace(" ","")}</ns0:SNILS>#end
+            <ns0:IdentityDocument>
+			#if ($MVDCriminal.request.Requester.IdentityDocument.TypeDoc == "PassportRF")
+			<ns0:PassportRF>
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.SeriesPass" !="")<ns0:Series>${MVDCriminal.request.Requester.IdentityDocument.SeriesPass}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.NumberPass" !="")<ns0:Number>${MVDCriminal.request.Requester.IdentityDocument.NumberPass}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:PassportRF>
+			#end
+			#if ($MVDCriminal.request.Requester.IdentityDocument.TypeDoc == "ForeignPassport")
+			<ns0:ForeignPassport>
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.SeriesFP" !="")<ns0:Series>${MVDCriminal.request.Requester.IdentityDocument.SeriesFP}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.NumberFP" !="")<ns0:Number>${MVDCriminal.request.Requester.IdentityDocument.NumberFP}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>
+			   <ns0:year>${MVDCriminal.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal.request.Requester.IdentityDocument.IssueDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal.request.Requester.IdentityDocument.IssueDate.ToString("%tdd")}</ns0:day>
+			    </ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ForeignPassport>
+			#end
+			#if ($MVDCriminal.request.Requester.IdentityDocument.TypeDoc == "ResidencePermitRF")
+			<ns0:ResidencePermitRF>
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.SeriesRP" !="")<ns0:Series>${MVDCriminal.request.Requester.IdentityDocument.SeriesRP}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.NumberRP" !="")<ns0:Number>${MVDCriminal.request.Requester.IdentityDocument.NumberRP}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ResidencePermitRF>
+			#end
+            </ns0:IdentityDocument>
+			 #if ($MVDCriminal.request.Requester.AddressType == "200")
+		  #if ("$!MVDCriminal.request.Requester.Address_200" !="")<ns0:Address>${MVDCriminal.request.Requester.Address_200}</ns0:Address>#end#end
+		   #if ($MVDCriminal.request.Requester.AddressType == "201")
+		  #if ("$!MVDCriminal.request.Requester.Address_201" !="")<ns0:Address>${MVDCriminal.request.Requester.Address_201}</ns0:Address>#end#end
+		  #if ("$!MVDCriminal.request.Requester.AddressType" !="")<ns0:AddressType>${MVDCriminal.request.Requester.AddressType}</ns0:AddressType>#end
+           
+        </ns0:Requester>
+        <ns0:Person>
+            <ns0:FullName>
+			#if ("$!MVDCriminal.request.Person.FamilyName" !="")<ns0:FamilyName>${MVDCriminal.request.Person.FamilyName}</ns0:FamilyName>#end
+			#if ("$!MVDCriminal.request.Person.FirstName" !="")<ns0:FirstName>${MVDCriminal.request.Person.FirstName}</ns0:FirstName>#end
+			#if ("$!MVDCriminal.request.Person.Patronymic" !="")<ns0:Patronymic>${MVDCriminal.request.Person.Patronymic}</ns0:Patronymic>#end
+            </ns0:FullName>
+            
+			#if ("$!MVDCriminal.request.Person.BirthDate.Day" !="" || "$!MVDCriminal.request.Person.BirthDate.Month" !="" || "$!MVDCriminal.request.Person.BirthDate.Year" !="")
+		  <ns0:BirthDate>
+		  #if ("$!MVDCriminal.request.Person.BirthDate.Year" !="")<ns0:year>${MVDCriminal.request.Person.BirthDate.Year}</ns0:year>#end	  
+		  #if ("$!MVDCriminal.request.Person.BirthDate.Month" !="")<ns0:month>${MVDCriminal.request.Person.BirthDate.Month}</ns0:month>#end
+		  #if ("$!MVDCriminal.request.Person.BirthDate.Day" !="")<ns0:day>${MVDCriminal.request.Person.BirthDate.Day}</ns0:day>#end
+		  </ns0:BirthDate>
+                  #end 
+			#if ("$!MVDCriminal.request.Person.BirthPlace" !="")<ns0:BirthPlace>${MVDCriminal.request.Person.BirthPlace}</ns0:BirthPlace>#end
+            #if ("$!MVDCriminal.request.Person.SNILS" !="")<ns0:SNILS>${MVDCriminal.request.Person.SNILS.Replace("-","").Replace(" ","")}</ns0:SNILS>#end
+             #foreach($MVDCriminalrequestPersonPreviousNames in ${MVDCriminal.request.Person.PreviousNames})
+			<ns0:PreviousName>
+                #if ("$!MVDCriminalrequestPersonPreviousNames.FamilyName" !="")<ns0:Surname>${MVDCriminalrequestPersonPreviousNames.FamilyName}</ns0:Surname>#end
+				#if ("$!MVDCriminalrequestPersonPreviousNames.FirstName" !="")<ns0:Name>${MVDCriminalrequestPersonPreviousNames.FirstName}</ns0:Name>#end
+				#if ("$!MVDCriminalrequestPersonPreviousNames.Patronymic" !="")<ns0:Patronymic>${MVDCriminalrequestPersonPreviousNames.Patronymic}</ns0:Patronymic>#end
+            </ns0:PreviousName>
+			#end
+            <ns0:IdentityDocument>
+                #if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "PassportRF")
+			<ns0:PassportRF>
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.SeriesPass" !="")<ns0:Series>${MVDCriminal.request.Person.IdentityDocument.SeriesPass}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.NumberPass" !="")<ns0:Number>${MVDCriminal.request.Person.IdentityDocument.NumberPass}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:PassportRF>
+			#end
+			#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ForeignPassport")
+			<ns0:ForeignPassport>
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.SeriesFP" !="")<ns0:Series>${MVDCriminal.request.Person.IdentityDocument.SeriesFP}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.NumberFP" !="")<ns0:Number>${MVDCriminal.request.Person.IdentityDocument.NumberFP}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>
+			   <ns0:year>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tdd")}</ns0:day>
+			    </ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ForeignPassport>
+			#end
+			#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ResidencePermitRF")
+			<ns0:ResidencePermitRF>
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.SeriesRP" !="")<ns0:Series>${MVDCriminal.request.Person.IdentityDocument.SeriesRP}</ns0:Series>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.NumberRP" !="")<ns0:Number>${MVDCriminal.request.Person.IdentityDocument.NumberRP}</ns0:Number>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ResidencePermitRF>
+			#end
+            </ns0:IdentityDocument>
+			<ns0:Addresses>
+                <ns0:RegionCode>000</ns0:RegionCode>
+                <ns0:Type>202</ns0:Type>
+            </ns0:Addresses>
+            <ns0:Addresses>
+                <ns0:RegionCode>031</ns0:RegionCode>
+                <ns0:Type>202</ns0:Type>
+            </ns0:Addresses>
+			<ns0:Addresses>
+                #if (${MVDCriminal.request.Person.BirthPlace_check} == true)
+				<ns0:RegionCode>${MVDCriminal.request.Person.BirthPlace_region}</ns0:RegionCode>
+				#else
+				<ns0:RegionCode>000</ns0:RegionCode>
+				#end
+				#if ("$!MVDCriminal.request.Person.BirthPlace" !="")<ns0:Address>${MVDCriminal.request.Person.BirthPlace}</ns0:Address>#end
+                <ns0:Type>000</ns0:Type>
+            </ns0:Addresses>
+			<ns0:Addresses>
+                #if (${MVDCriminal.request.Person.AddressForm_200.Address_check} == true)
+				<ns0:RegionCode>0${MVDCriminal.request.Person.AddressForm_200.RegionCodeFias.RegionCode}</ns0:RegionCode>
+				#else
+				<ns0:RegionCode>000</ns0:RegionCode>
+				#end
+				#if ("$!MVDCriminal.request.Person.AddressForm_200.Address" !="")<ns0:Address>${MVDCriminal.request.Person.AddressForm_200.Address}</ns0:Address>#end
+                <ns0:Type>200</ns0:Type>
+            </ns0:Addresses>
+			#if (${MVDCriminal.request.Person.AddressCollection_checkbox} == true)
+			 #foreach($MVDCriminalrequestPersonAddressCollection in ${MVDCriminal.request.Person.AddressCollection})
+            <ns0:Addresses>
+                 #if (${MVDCriminalrequestPersonAddressCollection.Address_check} == true)
+				<ns0:RegionCode>0${MVDCriminalrequestPersonAddressCollection.RegionCodeFias.RegionCode}</ns0:RegionCode>
+				#else
+				<ns0:RegionCode>000</ns0:RegionCode>
+				#end
+                #if ("$!MVDCriminalrequestPersonAddressCollection.Address" !="")<ns0:Address>${MVDCriminalrequestPersonAddressCollection.Address}</ns0:Address>#end
+                <ns0:Type>${MVDCriminalrequestPersonAddressCollection.Type}</ns0:Type>
+            </ns0:Addresses>#end
+			#end
+        </ns0:Person>
+        #if ("$!MVDCriminal.request.Person.Exemplars" !="")<ns0:Exemplars>${MVDCriminal.request.Person.Exemplars}</ns0:Exemplars>#end
+        <ns0:MFCInformation>
+		#if ("$!MVDCriminal.request.DestinationAddress" !="")<ns0:DestinationAddress>${MVDCriminal.request.DestinationAddress}</ns0:DestinationAddress>#end
+            <ns0:RegionCode>031</ns0:RegionCode>
+        </ns0:MFCInformation>
+    </ns0:Request>
+</ns0:CriminalRecordRequest>
+]]>
+			</vt:Template>
+			<vt:SetVariable>MVD_Criminal_SOAPRequest.xml</vt:SetVariable>
+		</Data>
+	</Step>
+
+	<!-- формирование тестового запроса из КП -->
+	<Step Name="createRequestTest">
+		<Transition Title="Далее" To="findRguCode" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<ns0:CriminalRecordRequest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ns0="urn://x-artefacts-mvd-gov-ru/giac-criminal-record/root/1.1.0" xmlns:smev="urn://x-artefacts-smev-gov-ru/supplementary/commons/1.2" Id="PERSONAL_SIGNATURE">
+    <ns0:Request Addressee="047" RequestRegisteredAt="2006-05-04T18:13:51.0" RequestNumber="EB7F4870-09FB-3B92-B9D0-B79D53CD7932" OldRequestNumber="EB7F4870-09FB-3B92-B9D8-B79D53CD7937" MFCRequestNumber="00010161">
+        <ns0:Requester RequesterType="100">
+            <ns0:FullName>
+                <ns0:FamilyName>Гордеев</ns0:FamilyName>
+                <ns0:FirstName>Петр</ns0:FirstName>
+                <ns0:Patronymic>Семенович</ns0:Patronymic>
+            </ns0:FullName>
+            <ns0:BirthDate>
+                <ns0:year>1956</ns0:year>
+                <ns0:month>09</ns0:month>
+                <ns0:day>10</ns0:day>
+            </ns0:BirthDate>
+            <ns0:BirthPlace>Владимирская обл., с. Филлиповское</ns0:BirthPlace>
+            <ns0:SNILS>12345678912</ns0:SNILS>
+            <ns0:IdentityDocument>
+                <ns0:PassportRF>
+                    <ns0:Series>4547</ns0:Series>
+                    <ns0:Number>459874</ns0:Number>
+                    <ns0:IssueDate>2006-05-04</ns0:IssueDate>
+                    <ns0:Issuer>УФМС по г. Киржач Владимирской области</ns0:Issuer>
+                </ns0:PassportRF>
+            </ns0:IdentityDocument>
+            <ns0:Address>г. Москва, ул. Вавилова, 15</ns0:Address>
+            <ns0:AddressType>200</ns0:AddressType>
+        </ns0:Requester>
+        <ns0:Person>
+            <ns0:FullName>
+                <ns0:FamilyName>Гордеев</ns0:FamilyName>
+                <ns0:FirstName>Петр</ns0:FirstName>
+                <ns0:Patronymic>Семенович</ns0:Patronymic>
+            </ns0:FullName>
+            <ns0:BirthDate>
+                <ns0:year>1956</ns0:year>
+                <ns0:month>09</ns0:month>
+                <ns0:day>10</ns0:day>
+            </ns0:BirthDate>
+            <ns0:BirthPlace>Владимирская обл., с. Филлиповское</ns0:BirthPlace>
+            <ns0:SNILS>12345678912</ns0:SNILS>
+            <ns0:PreviousName>
+                <ns0:Surname>Соколов</ns0:Surname>
+            </ns0:PreviousName>
+            <ns0:IdentityDocument>
+                <ns0:PassportRF>
+                    <ns0:Series>4547</ns0:Series>
+                    <ns0:Number>459874</ns0:Number>
+                    <ns0:IssueDate>2006-05-04</ns0:IssueDate>
+                    <ns0:Issuer>УФМС по г. Киржач Владимирской области</ns0:Issuer>
+                </ns0:PassportRF>
+            </ns0:IdentityDocument>
+            <ns0:Addresses>
+                <ns0:RegionCode>031</ns0:RegionCode>
+                <ns0:Address>Владимирская обл., с. Филлиповское</ns0:Address>
+                <ns0:Type>000</ns0:Type>
+            </ns0:Addresses>
+            <ns0:Addresses>
+                <ns0:RegionCode>099</ns0:RegionCode>
+                <ns0:Address>г. Москва, ул. Вавилова, 15</ns0:Address>
+                <ns0:Type>200</ns0:Type>
+            </ns0:Addresses>
+        </ns0:Person>
+        <ns0:Exemplars>1</ns0:Exemplars>
+        <ns0:MFCInformation>
+            <ns0:DestinationAddress>г. Москва, ул. Советская, д.5</ns0:DestinationAddress>
+            <ns0:RegionCode>099</ns0:RegionCode>
+            <ns0:MFCRegionCode>099-150</ns0:MFCRegionCode>
+        </ns0:MFCInformation>
+    </ns0:Request>
+</ns0:CriminalRecordRequest>]]>
+			</vt:Template>
+			<vt:SetVariable>MVD_Criminal_SOAPRequest.xml</vt:SetVariable>
+		</Data>
+	</Step>
+
+	<Step Name="findRguCode">
+		<Transition Title="Далее" To="createBPM" />
+		<Data xsi:type="dt:DataTransformationModuleData" xmlns:dt="http://www.netvoxlab.ru/ReDoc/Workflow/DataTransformationModule">
+			<dt:Title>Поиск РГУ кода</dt:Title>
+			<dt:VarDataOut>FrguCode</dt:VarDataOut>
+			<dt:Transformation>FindFrguCode</dt:Transformation>
+		</Data>
+	</Step>
+
+	<!-- формирование BusinessProcessMetadata -->
+	<Step Name="createBPM">
+		<Transition Title="Далее" To="file" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<bpmns:BusinessProcessMetadata xmlns:bpmns="urn://x-artefacts-smev-gov-ru/services/message-exchange/business-process-metadata/1.0">
+					<bpmns:frgu>${FrguCode}</bpmns:frgu>
+				</bpmns:BusinessProcessMetadata>]]>
+			</vt:Template>
+			<vt:SetVariable>BusinessProcessMetadataWithFrgu</vt:SetVariable>
+		</Data>
+	</Step>
+	
+	<!-- делаем дело общедоступным -->
+	<Step Name="file">
+		<Transition Title="Далее" To="sendRequest" />
+		<Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+			<fs:CommonInfo>
+				<fs:IsPublic>true</fs:IsPublic>
+			</fs:CommonInfo>
+		</Data>
+	</Step>
+	
+	<!-- отправка запроса -->
+	<Step Name="sendRequest"> 
+		<Transition Title="Далее" To="vars"  />
+    	<Transition Title="Далее" To="vars_error" Action="Error" />
+		<Data xmlns:send="http://www.netvoxlab.ru/ReDoc/Workflow/SendSoap" xsi:type="send:SendSoapData">
+			<send:TaskTitle>Запросить сведения  (МВД - судимость)</send:TaskTitle>
+			<send:Duration>30wd</send:Duration>
+			<send:FtpFilesSizeLimit>3</send:FtpFilesSizeLimit>
+			<send:VariableWithRequest>MVD_Criminal_SOAPRequest.xml</send:VariableWithRequest>
+			<send:NeedAttachFiles>true</send:NeedAttachFiles>
+			<send:SendFilesRegex>^Шаблон заявки|Копия всех заполненных страниц документа, удостоверяющего личность|Копия документа, подтверждающего родство или факт усыновления|Копия доверенности на право получения справки о судимости, выданной в установленном законодательством Российской Федерации порядке|Копия документа, подтверждающего факт установления опеки|Перевод паспорта$</send:SendFilesRegex> <!-- -->
+			<!--<send:SendFilesRegex>^Scan_Копия_всех.+\.pdf$</send:SendFilesRegex>-->
+			<send:BusinessProcessMetadata>BusinessProcessMetadataWithFrgu</send:BusinessProcessMetadata>
+			<send:SaveResponseToVariable>MVD_Criminal_SOAPResponse.xml</send:SaveResponseToVariable>
+			<!-- <send:Endpoint>http://smev3-n0.test.gosuslugi.ru:7500/ws</send:Endpoint> адрес теста -->
+			<send:Endpoint>http://172.20.3.12:7500/ws</send:Endpoint>
+			<!-- адрес прода-->
+			<send:SaopAction>urn:SendRequest</send:SaopAction>
+			<send:SignOV/>
+			<send:SignSP/>
+			<send:CheckResponseSign>false</send:CheckResponseSign>
+			<!-- false ставим, если ошибка при получении ответа-->
+			<send:MR>MR300</send:MR>
+			<send:ReadResponse send:Variable="SmevMessageType" send:XPath=".//ns2:MessageMetadata/ns2:MessageType">
+				<send:Namespace send:Uri="urn://x-artefacts-smev-gov-ru/services/message-exchange/types/1.1" send:Alias="ns2"/>
+			</send:ReadResponse>
+			<send:ReadResponse send:Variable="Fault" send:XPath=".//s:Fault/faultstring">
+				<send:Namespace send:Uri="http://schemas.xmlsoap.org/soap/envelope/" send:Alias="s"/>
+			</send:ReadResponse>
+			<send:SuccessCondition>
+				<![CDATA[(SmevMessageType == "REQUEST")]]>
+			</send:SuccessCondition> 
+			<send:Autorun>true</send:Autorun>
+			<send:AutoRepeat>false</send:AutoRepeat>
+			<!-- <send:IsTestMessage>true</send:IsTestMessage>
+			на проде этот тэг убрать -->
+		</Data>
+	</Step>
+	
+	<Step Name="vars_error">
+		<Transition Title="Далее" To="pdf2_error" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<Request>				
+	#if(${MVDCriminal.request.ORGNAME})<DepartmentName>${MVDCriminal.request.ORGNAME}</DepartmentName>#end
+	#if(${MVDCriminal.request.DATE})<Date>${MVDCriminal.request.DATE.ToString("%tdd.%tMM.%tyyyy %tHH:%tmm:%tss")}</Date>#end
+	#if(${MVDCriminal.request.FIO})<DepartmentWorkerFio>${MVDCriminal.request.FIO}</DepartmentWorkerFio>#end	
+	#if(${MVDCriminal.request.Person.FamilyName})
+	<param>
+		<name>Фамилия</name>
+		<value>${MVDCriminal.request.Person.FamilyName}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.FirstName})
+	<param>
+		<name>Имя</name>
+		<value>${MVDCriminal.request.Person.FirstName}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.Patronymic})
+	<param>
+		<name>Отчество</name>
+		<value>${MVDCriminal.request.Person.Patronymic}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.BirthPlace})
+	<param>
+		<name>Место рождения</name>
+		<value>${MVDCriminal.request.Person.BirthPlace}</value>
+	</param>
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "PassportRF")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesPass})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesPass}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberPass})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberPass}</value>
+	</param>
+	#end
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ForeignPassport")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesFP})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesFP}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberFP})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberFP}</value>
+	</param>
+	#end
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ResidencePermitRF")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesRP})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesRP}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberRP})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberRP}</value>
+	</param>
+	#end
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.IssueDate})
+	<param>
+		<name>Дата выдачи</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</value>
+	</param>#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.Issuer})
+	<param>
+		<name>Кем выдан</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.Issuer}</value>
+	</param>
+	#end
+	 #if(${MVDCriminal.request.Person.Exemplars})
+	 <param>
+		<name>Количество экземпляров справки</name>
+		<value>${MVDCriminal.request.Person.Exemplars}</value>
+	</param>
+	#end
+	<param>
+		<name>Место получения справки</name>
+		<value>${DepartmentConfig.DepartmentName}</value>
+	</param>	 
+</Request>]]>
+			</vt:Template>
+			<vt:SetVariable>vars</vt:SetVariable>
+		</Data>
+	</Step> 
+
+	<Step Name="pdf2_error">
+		<Transition To="ApplicationProcessingStarted2" Title="1" />
+		<Data xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf" xsi:type="pdf:GeneratePdfData">
+			<pdf:XSLTTemplateId>MVD_Criminal_SOAPResponse_new</pdf:XSLTTemplateId>
+			<pdf:AttachNameWithDataXML>MVD_Criminal_SOAPResponse.xml</pdf:AttachNameWithDataXML>
+			<pdf:OutputAttach>МВД. Информация об ошибке.PDF</pdf:OutputAttach>
+			<pdf:AddContextVariables>true</pdf:AddContextVariables>
+		</Data>
+	</Step>
+	
+	<Step Name="ApplicationProcessingStarted2">
+        <Transition Title="Далее" To="Error" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicationProcessingStarted Назначение на ответственного за обработку (ОИВ)</fs:Description>
+                <fs:MfcServiceStatus>ApplicationProcessingStarted</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+	
+	<Step Name="Error">
+    <Transition To="ApplicationClosed" Title="Информация передана администратору. Архивировать дело" Action="Submit" AskComment="true" />
+    <Data xmlns:st="http://www.netvoxlab.ru/ReDoc/Workflow/SimpleTask" xsi:type="st:SimpleTaskData">
+      <st:Title>ОШИБКА. Обратитесь к админстратору.</st:Title>
+      <st:Duration>480</st:Duration>
+    </Data>
+  </Step>
+  
+  <Step Name="ApplicationClosed">
+        <Transition Title="Далее" To="WriteToRequestRegister_TicketIssued" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicationClosed Дело закрыто</fs:Description>
+                <fs:MfcServiceStatus>ApplicationClosed</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+
+	<Step Name="vars">
+		<Transition Title="Далее" To="pdf2" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<Request>				
+	#if(${MVDCriminal.request.ORGNAME})<DepartmentName>${MVDCriminal.request.ORGNAME}</DepartmentName>#end
+	#if(${MVDCriminal.request.DATE})<Date>${MVDCriminal.request.DATE.ToString("%tdd.%tMM.%tyyyy %tHH:%tmm:%tss")}</Date>#end
+	#if(${MVDCriminal.request.FIO})<DepartmentWorkerFio>${MVDCriminal.request.FIO}</DepartmentWorkerFio>#end	
+	#if(${MVDCriminal.request.Person.FamilyName})
+	<param>
+		<name>Фамилия</name>
+		<value>${MVDCriminal.request.Person.FamilyName}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.FirstName})
+	<param>
+		<name>Имя</name>
+		<value>${MVDCriminal.request.Person.FirstName}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.Patronymic})
+	<param>
+		<name>Отчество</name>
+		<value>${MVDCriminal.request.Person.Patronymic}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.BirthPlace})
+	<param>
+		<name>Место рождения</name>
+		<value>${MVDCriminal.request.Person.BirthPlace}</value>
+	</param>
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "PassportRF")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesPass})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesPass}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberPass})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberPass}</value>
+	</param>
+	#end
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ForeignPassport")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesFP})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesFP}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberFP})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberFP}</value>
+	</param>
+	#end
+	#end
+	#if ($MVDCriminal.request.Person.IdentityDocument.TypeDoc == "ResidencePermitRF")
+	#if(${MVDCriminal.request.Person.IdentityDocument.SeriesRP})
+	<param>
+		<name>Серия документа, удостоверяющего личность</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.SeriesRP}</value>
+	</param>
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.NumberRP})
+	<param>
+		<name>Номер документа</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.NumberRP}</value>
+	</param>
+	#end
+	#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.IssueDate})
+	<param>
+		<name>Дата выдачи</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</value>
+	</param>#end
+	#if(${MVDCriminal.request.Person.IdentityDocument.Issuer})
+	<param>
+		<name>Кем выдан</name>
+		<value>${MVDCriminal.request.Person.IdentityDocument.Issuer}</value>
+	</param>
+	#end
+	 #if(${MVDCriminal.request.Person.Exemplars})
+	 <param>
+		<name>Количество экземпляров справки</name>
+		<value>${MVDCriminal.request.Person.Exemplars}</value>
+	</param>
+	#end
+	<param>
+		<name>Место получения справки</name>
+		<value>${DepartmentConfig.DepartmentName}</value>
+	</param>	 
+</Request>]]>
+			</vt:Template>
+			<vt:SetVariable>vars</vt:SetVariable>
+		</Data>
+	</Step> 
+
+	<Step Name="pdf2">
+		<Transition To="MVDCriminal2" Title="1" />
+		<Data xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf" xsi:type="pdf:GeneratePdfData">
+			<pdf:XSLTTemplateId>MVD_Criminal_SOAPResponse_new</pdf:XSLTTemplateId>
+			<pdf:AttachNameWithDataXML>MVD_Criminal_SOAPResponse.xml</pdf:AttachNameWithDataXML>
+			<pdf:OutputAttach>МВД. Информация о наличии или отсутствии судимости.PDF</pdf:OutputAttach>
+			<pdf:AddContextVariables>true</pdf:AddContextVariables>
+		</Data>
+	</Step>
+
+	<Step Name="MVDCriminal2">
+		<Transition Title="Готово" To="decision1" />
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>MVD_criminal_3.0_2_new</df:IdRef>
+			<df:Title>Заполнить форму о результате (МВД - судимость)</df:Title>
+			<df:Duration>1wd</df:Duration>
+		</Data>
+	</Step>	
+
+	<Step xsi:type="Decision" Name="decision1">
+		<Transition Title="1" To="textsms">
+			<Condition>
+				<Expression>"yes" == MVDCriminal2.request.YesNoAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Transition Title="2" To="MVDCriminal_vibor_ytochn">
+			<Condition>
+				<Expression>"no" == MVDCriminal2.request.YesNoAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Data />
+	</Step>
+
+	<Step Name="MVDCriminal_vibor_ytochn">
+		<Transition Title="Готово" To="decision_ytochn" />
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>MVD_criminal_vibor_ytochn_3.0_new</df:IdRef>
+			<df:Title>Заполнить форму выбора об уточняющем запросе (МВД - судимость)</df:Title>
+			<df:Duration>1wd</df:Duration>
+		</Data>
+	</Step>	
+
+	<Step xsi:type="Decision" Name="decision_ytochn">
+		<Transition Title="1" To="MVDCriminal_ytoch">
+			<Condition>
+				<Expression>"yes" == MVDCriminal_vibor_ytochn.request.YesNoAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Transition Title="2" To="ApplicationClosed">
+			<Condition>
+				<Expression>"no" == MVDCriminal_vibor_ytochn.request.YesNoAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Data />
+	</Step>
+	
+	<!-- форма для уточняющего запроса -->
+	<Step Name="MVDCriminal_ytoch">
+		<Transition Title="Готово" To="createRequest_ytoch" /> 
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>MVD_criminal_ytoch_3.0_new</df:IdRef>
+			<df:Title>Заполнить форму уточняющего запроса (МВД - судимость)</df:Title>
+			<df:Duration>480</df:Duration>
+		</Data>
+	</Step>
+	
+	<!-- уточняющий запрос -->
+	<Step Name="createRequest_ytoch">
+		<Transition Title="Далее" To="findRguCode_ytoch" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<?xml version="1.0" encoding="UTF-8"?>
+<ns0:CriminalRecordRequest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ns0="urn://x-artefacts-mvd-gov-ru/giac-criminal-record/root/1.1.0" xmlns:smev="urn://x-artefacts-smev-gov-ru/supplementary/commons/1.2" Id="PERSONAL_SIGNATURE">
+    <ns0:Request Addressee="031" RequestRegisteredAt="${DateNow}" RequestNumber="${BaseRequestId}" OldRequestNumber="${MVDCriminal.request.RequestNumber}" MFCRequestNumber="${FileInfo.Identificator}">
+        <ns0:Requester RequesterType="${MVDCriminal_ytoch.request.Requester.RequesterType}">
+            <ns0:FullName>
+                <ns0:FamilyName>${MVDCriminal_ytoch.request.Requester.FamilyName}</ns0:FamilyName>
+                <ns0:FirstName>${MVDCriminal_ytoch.request.Requester.FirstName}</ns0:FirstName>
+                #if ("$!MVDCriminal_ytoch.request.Requester.Patronymic" !="")<ns0:Patronymic>${MVDCriminal_ytoch.request.Requester.Patronymic}</ns0:Patronymic>#end
+            </ns0:FullName>
+            <ns0:BirthDate>
+                <ns0:year>${MVDCriminal_ytoch.request.Requester.BirthDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal_ytoch.request.Requester.BirthDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal_ytoch.request.Requester.BirthDate.ToString("%tdd")}</ns0:day>
+            </ns0:BirthDate>
+            <ns0:BirthPlace>${MVDCriminal_ytoch.request.Requester.BirthPlace}</ns0:BirthPlace>
+            #if ("$!MVDCriminal_ytoch.request.Requester.SNILS" !="")<ns0:SNILS>${MVDCriminal_ytoch.request.Requester.SNILS.Replace("-","").Replace(" ","")}</ns0:SNILS>#end
+            <ns0:IdentityDocument>
+			#if ($MVDCriminal_ytoch.request.Requester.IdentityDocument.TypeDoc == "PassportRF")
+			<ns0:PassportRF>
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesPass" !="")<ns0:Series>${MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesPass}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberPass" !="")<ns0:Number>${MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberPass}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:PassportRF>
+			#end
+			#if ($MVDCriminal_ytoch.request.Requester.IdentityDocument.TypeDoc == "ForeignPassport")
+			<ns0:ForeignPassport>
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesFP" !="")<ns0:Series>${MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesFP}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberFP" !="")<ns0:Number>${MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberFP}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>
+			   <ns0:year>${MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate.ToString("%tdd")}</ns0:day>
+			    </ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ForeignPassport>
+			#end
+			#if ($MVDCriminal_ytoch.request.Requester.IdentityDocument.TypeDoc == "ResidencePermitRF")
+			<ns0:ResidencePermitRF>
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesRP" !="")<ns0:Series>${MVDCriminal_ytoch.request.Requester.IdentityDocument.SeriesRP}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberRP" !="")<ns0:Number>${MVDCriminal_ytoch.request.Requester.IdentityDocument.NumberRP}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal_ytoch.request.Requester.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Requester.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ResidencePermitRF>
+			#end
+            </ns0:IdentityDocument>
+			 #if ($MVDCriminal_ytoch.request.Requester.AddressType == "200")
+		  #if ("$!MVDCriminal_ytoch.request.Requester.Address_200" !="")<ns0:Address>${MVDCriminal_ytoch.request.Requester.Address_200}</ns0:Address>#end#end
+		   #if ($MVDCriminal_ytoch.request.Requester.AddressType == "201")
+		  #if ("$!MVDCriminal_ytoch.request.Requester.Address_201" !="")<ns0:Address>${MVDCriminal_ytoch.request.Requester.Address_201}</ns0:Address>#end#end
+		  #if ("$!MVDCriminal_ytoch.request.Requester.AddressType" !="")<ns0:AddressType>${MVDCriminal_ytoch.request.Requester.AddressType}</ns0:AddressType>#end
+           
+        </ns0:Requester>
+        <ns0:Person>
+            <ns0:FullName>
+			#if ("$!MVDCriminal_ytoch.request.Person.FamilyName" !="")<ns0:FamilyName>${MVDCriminal_ytoch.request.Person.FamilyName}</ns0:FamilyName>#end
+			#if ("$!MVDCriminal_ytoch.request.Person.FirstName" !="")<ns0:FirstName>${MVDCriminal_ytoch.request.Person.FirstName}</ns0:FirstName>#end
+			#if ("$!MVDCriminal_ytoch.request.Person.Patronymic" !="")<ns0:Patronymic>${MVDCriminal_ytoch.request.Person.Patronymic}</ns0:Patronymic>#end
+            </ns0:FullName>
+            
+			#if ("$!MVDCriminal_ytoch.request.Person.BirthDate.Day" !="" || "$!MVDCriminal_ytoch.request.Person.BirthDate.Month" !="" || "$!MVDCriminal_ytoch.request.Person.BirthDate.Year" !="")
+		  <ns0:BirthDate>
+		  #if ("$!MVDCriminal_ytoch.request.Person.BirthDate.Year" !="")<ns0:year>${MVDCriminal_ytoch.request.Person.BirthDate.Year}</ns0:year>#end	  
+		  #if ("$!MVDCriminal_ytoch.request.Person.BirthDate.Month" !="")<ns0:month>${MVDCriminal_ytoch.request.Person.BirthDate.Month}</ns0:month>#end
+		  #if ("$!MVDCriminal_ytoch.request.Person.BirthDate.Day" !="")<ns0:day>${MVDCriminal_ytoch.request.Person.BirthDate.Day}</ns0:day>#end
+		  </ns0:BirthDate>
+                  #end 
+			#if ("$!MVDCriminal_ytoch.request.Person.BirthPlace" !="")<ns0:BirthPlace>${MVDCriminal_ytoch.request.Person.BirthPlace}</ns0:BirthPlace>#end
+            #if ("$!MVDCriminal_ytoch.request.Person.SNILS" !="")<ns0:SNILS>${MVDCriminal_ytoch.request.Person.SNILS.Replace("-","").Replace(" ","")}</ns0:SNILS>#end
+             #foreach($MVDCriminal_ytochrequestPersonPreviousNames in ${MVDCriminal_ytoch.request.Person.PreviousNames})
+			<ns0:PreviousName>
+                #if ("$!MVDCriminal_ytochrequestPersonPreviousNames.FamilyName" !="")<ns0:Surname>${MVDCriminal_ytochrequestPersonPreviousNames.FamilyName}</ns0:Surname>#end
+				#if ("$!MVDCriminal_ytochrequestPersonPreviousNames.FirstName" !="")<ns0:Name>${MVDCriminal_ytochrequestPersonPreviousNames.FirstName}</ns0:Name>#end
+				#if ("$!MVDCriminal_ytochrequestPersonPreviousNames.Patronymic" !="")<ns0:Patronymic>${MVDCriminal_ytochrequestPersonPreviousNames.Patronymic}</ns0:Patronymic>#end
+            </ns0:PreviousName>
+			#end
+            <ns0:IdentityDocument>
+                #if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "PassportRF")
+			<ns0:PassportRF>
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesPass" !="")<ns0:Series>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesPass}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.NumberPass" !="")<ns0:Number>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberPass}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:PassportRF>
+			#end
+			#if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "ForeignPassport")
+			<ns0:ForeignPassport>
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesFP" !="")<ns0:Series>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesFP}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.NumberFP" !="")<ns0:Number>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberFP}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>
+			   <ns0:year>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy")}</ns0:year>
+                <ns0:month>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tMM")}</ns0:month>
+                <ns0:day>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tdd")}</ns0:day>
+			    </ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ForeignPassport>
+			#end
+			#if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "ResidencePermitRF")
+			<ns0:ResidencePermitRF>
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesRP" !="")<ns0:Series>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesRP}</ns0:Series>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.NumberRP" !="")<ns0:Number>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberRP}</ns0:Number>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate" !="")<ns0:IssueDate>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</ns0:IssueDate>#end
+			  #if ("$!MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer" !="")<ns0:Issuer>${MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer}</ns0:Issuer>#end
+			</ns0:ResidencePermitRF>
+			#end
+            </ns0:IdentityDocument>
+			<ns0:Addresses>
+                <ns0:RegionCode>000</ns0:RegionCode>
+                <ns0:Type>202</ns0:Type>
+            </ns0:Addresses>
+            <ns0:Addresses>
+                <ns0:RegionCode>031</ns0:RegionCode>
+                <ns0:Type>202</ns0:Type>
+            </ns0:Addresses>
+			<ns0:Addresses>
+                <ns0:RegionCode>${MVDCriminal_ytoch.request.Person.BirthPlace_region}</ns0:RegionCode>
+				#if ("$!MVDCriminal_ytoch.request.Person.BirthPlace" !="")<ns0:Address>${MVDCriminal_ytoch.request.Person.BirthPlace}</ns0:Address>#end
+                <ns0:Type>000</ns0:Type>
+            </ns0:Addresses>
+			<ns0:Addresses>
+                <ns0:RegionCode>${MVDCriminal_ytoch.request.Person.AddressForm_200.RegionCodeFias.RegionCode}</ns0:RegionCode>
+				#if ("$!MVDCriminal_ytoch.request.Person.AddressForm_200.Address" !="")<ns0:Address>${MVDCriminal_ytoch.request.Person.AddressForm_200.Address}</ns0:Address>#end
+                <ns0:Type>200</ns0:Type>
+            </ns0:Addresses>
+			#if (${MVDCriminal_ytoch.request.Person.AddressCollection_checkbox} == true)
+			 #foreach($MVDCriminal_ytochrequestPersonAddressCollection in ${MVDCriminal_ytoch.request.Person.AddressCollection})
+            <ns0:Addresses>
+                <ns0:RegionCode>${MVDCriminal_ytochrequestPersonAddressCollection.RegionCodeFias.RegionCode}</ns0:RegionCode>
+                #if ("$!MVDCriminal_ytochrequestPersonAddressCollection.Address" !="")<ns0:Address>${MVDCriminal_ytochrequestPersonAddressCollection.Address}</ns0:Address>#end
+                <ns0:Type>${MVDCriminal_ytochrequestPersonAddressCollection.Type}</ns0:Type>
+            </ns0:Addresses>#end
+			#end
+        </ns0:Person>
+        #if ("$!MVDCriminal_ytoch.request.Person.Exemplars" !="")<ns0:Exemplars>${MVDCriminal_ytoch.request.Person.Exemplars}</ns0:Exemplars>#end
+        <ns0:MFCInformation>
+		#if ("$!MVDCriminal_ytoch.request.DestinationAddress" !="")<ns0:DestinationAddress>${MVDCriminal_ytoch.request.DestinationAddress}</ns0:DestinationAddress>#end
+            <ns0:RegionCode>031</ns0:RegionCode>
+        </ns0:MFCInformation>
+    </ns0:Request>
+</ns0:CriminalRecordRequest>
+]]>
+			</vt:Template>
+			<vt:SetVariable>MVD_Criminal_SOAPRequest_specifying.xml</vt:SetVariable>
+		</Data>
+	</Step>
+	
+	<!-- отправка уточняющего запроса -->
+	<Step Name="findRguCode_ytoch">
+		<Transition Title="Далее" To="createBPM_ytoch" />
+		<Data xsi:type="dt:DataTransformationModuleData" xmlns:dt="http://www.netvoxlab.ru/ReDoc/Workflow/DataTransformationModule">
+			<dt:Title>Поиск РГУ кода</dt:Title>
+			<dt:VarDataOut>FrguCode</dt:VarDataOut>
+			<dt:Transformation>FindFrguCode</dt:Transformation>
+		</Data>
+	</Step>
+
+	<!-- формирование BusinessProcessMetadata -->
+	<Step Name="createBPM_ytoch">
+		<Transition Title="Далее" To="sendRequest_ytoch" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<bpmns:BusinessProcessMetadata xmlns:bpmns="urn://x-artefacts-smev-gov-ru/services/message-exchange/business-process-metadata/1.0">
+					<bpmns:frgu>${FrguCode}</bpmns:frgu>
+				</bpmns:BusinessProcessMetadata>]]>
+			</vt:Template>
+			<vt:SetVariable>BusinessProcessMetadataWithFrgu</vt:SetVariable>
+		</Data>
+	</Step>
+	
+	<!-- отправка запроса -->
+	<Step Name="sendRequest_ytoch"> 
+		<Transition Title="Далее" To="vars_ytoch" />
+		<Data xmlns:send="http://www.netvoxlab.ru/ReDoc/Workflow/SendSoap" xsi:type="send:SendSoapData">
+			<send:TaskTitle>Отправить уточняющий запрос  (МВД - судимость)</send:TaskTitle>
+			<send:Duration>30wd</send:Duration>
+			<send:VariableWithRequest>MVD_Criminal_SOAPRequest_specifying.xml</send:VariableWithRequest>
+			<send:NeedAttachFiles>true</send:NeedAttachFiles>
+			<send:SendFilesRegex>^Шаблон заявки|Копия всех заполненных страниц документа, удостоверяющего личность|Копия документа, подтверждающего родство или факт усыновления|Копия доверенности на право получения справки о судимости, выданной в установленном законодательством Российской Федерации порядке|Копия документа, подтверждающего факт установления опеки|Перевод паспорта$</send:SendFilesRegex> <!-- -->
+			<!--<send:SendFilesRegex>^Scan_Копия_всех.+\.pdf$</send:SendFilesRegex>-->
+			<send:BusinessProcessMetadata>BusinessProcessMetadataWithFrgu</send:BusinessProcessMetadata>
+			<send:SaveResponseToVariable>MVD_Criminal_SOAPResponse_specifying.xml</send:SaveResponseToVariable>
+			<!--<send:Endpoint>http://smev3-n0.test.gosuslugi.ru:7500/ws</send:Endpoint> адрес теста -->
+			<send:Endpoint>http://172.20.3.12:7500/ws</send:Endpoint>
+			<!-- адрес прода-->
+			<send:SaopAction>urn:SendRequest</send:SaopAction>
+			<send:SignOV/>
+			<send:CheckResponseSign>false</send:CheckResponseSign>
+			<!-- false ставим, если ошибка при получении ответа-->
+			<send:MR>MR300</send:MR>
+			<send:ReadResponse send:Variable="SmevMessageType" send:XPath=".//ns2:MessageMetadata/ns2:MessageType">
+				<send:Namespace send:Uri="urn://x-artefacts-smev-gov-ru/services/message-exchange/types/1.1" send:Alias="ns2"/>
+			</send:ReadResponse>
+			<send:ReadResponse send:Variable="Fault" send:XPath=".//s:Fault/faultstring">
+				<send:Namespace send:Uri="http://schemas.xmlsoap.org/soap/envelope/" send:Alias="s"/>
+			</send:ReadResponse>
+			<send:SuccessCondition>
+				<![CDATA[(SmevMessageType == "REQUEST")]]>
+			</send:SuccessCondition> 
+			<send:Autorun>true</send:Autorun>
+			<send:AutoRepeat>false</send:AutoRepeat>
+			<!--<send:IsTestMessage>true</send:IsTestMessage>
+			 на проде этот тэг убрать -->
+		</Data>
+	</Step>
+
+	<Step Name="vars_ytoch">
+		<Transition Title="Далее" To="pdf2_ytoch" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<Request>				
+					#if(${MVDCriminal_ytoch.request.ORGNAME})<DepartmentName>${MVDCriminal_ytoch.request.ORGNAME}</DepartmentName>#end
+					#if(${MVDCriminal_ytoch.request.DATE})<Date>${MVDCriminal_ytoch.request.DATE.ToString("%tdd.%tMM.%tyyyy %tHH:%tmm:%tss")}</Date>#end
+					#if(${MVDCriminal_ytoch.request.FIO})<DepartmentWorkerFio>${MVDCriminal_ytoch.request.FIO}</DepartmentWorkerFio>#end	
+					#if(${MVDCriminal_ytoch.request.Person.FamilyName})<param><name>Фамилия</name><value>${MVDCriminal_ytoch.request.Person.FamilyName}</value></param>#end
+					#if(${MVDCriminal_ytoch.request.Person.FirstName})<param><name>Имя</name><value>${MVDCriminal_ytoch.request.Person.FirstName}</value></param>#end
+					#if(${MVDCriminal_ytoch.request.Person.Patronymic})<param><name>Отчество</name><value>${MVDCriminal_ytoch.request.Person.Patronymic}</value></param>#end
+					#if(${MVDCriminal_ytoch.request.Person.BirthPlace})<param><name>Место рождения</name><value>${MVDCriminal_ytoch.request.Person.BirthPlace}</value></param>#end
+					 #if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "PassportRF")
+		   #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesPass})<param><name>Серия документа, удостоверяющего личность</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesPass}</value></param>#end
+			 #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberPass})<param><name>Номер документа</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberPass}</value></param>#end
+		   #end
+			#if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "ForeignPassport")
+		  #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesFP})<param><name>Серия документа, удостоверяющего личность</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesFP}</value></param>#end
+			 #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberFP})<param><name>Номер документа</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberFP}</value></param>#end
+			#end
+			#if ($MVDCriminal_ytoch.request.Person.IdentityDocument.TypeDoc == "ResidencePermitRF")
+			#if(${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesRP})<param><name>Серия документа, удостоверяющего личность</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.SeriesRP}</value></param>#end
+			 #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberRP})<param><name>Номер документа</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.NumberRP}</value></param>#end
+		   #end
+		   #if(${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate})<param><name>Дата выдачи</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.IssueDate.ToString("%tyyyy-%tMM-%tdd")}</value></param>#end
+	#if(${MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer})<param><name>Кем выдан</name><value>${MVDCriminal_ytoch.request.Person.IdentityDocument.Issuer}</value></param>#end
+	 #if(${MVDCriminal_ytoch.request.Person.Exemplars})<param><name>Количество экземпляров справки</name><value>${MVDCriminal_ytoch.request.Person.Exemplars}</value></param>#end
+			<param><name>Место получения справки</name><value>${DepartmentConfig.DepartmentName}</value></param>	 
+				</Request>]]>
+			</vt:Template>
+			<vt:SetVariable>vars</vt:SetVariable>
+		</Data>
+	</Step> 
+	
+	<Step Name="pdf2_ytoch">
+		<Transition To="MVDCriminal2" Title="1" />
+		<Data xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf" xsi:type="pdf:GeneratePdfData">
+			<pdf:XSLTTemplateId>MVD_Criminal_SOAPResponse_ytoch</pdf:XSLTTemplateId>
+			<pdf:AttachNameWithDataXML>MVD_Criminal_SOAPResponse_specifying.xml</pdf:AttachNameWithDataXML>
+			<pdf:OutputAttach>МВД. Результат уточняющего запроса.PDF</pdf:OutputAttach>
+			<pdf:AddContextVariables>true</pdf:AddContextVariables>
+		</Data>
+	</Step>
+	
+	<Step Name="textsms">
+		<Transition Title="Далее" To="ApplicationProcessingStarted" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[Ваши документы готовы. Справка по тел. +7(4722)42-42-42]]>
+			</vt:Template>
+			<vt:SetVariable>SendMessage</vt:SetVariable>
+		</Data>
+	</Step> 
+	
+	<Step Name="ApplicationProcessingStarted">
+        <Transition Title="Далее" To="callCenter" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicationProcessingStarted Назначение на ответственного за обработку (ОИВ)</fs:Description>
+                <fs:MfcServiceStatus>ApplicationProcessingStarted</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+	
+	
+	<Step Name="callCenter">
+		<Transition To="MVDCriminal3" Title="Подтвердить информирование" />
+		<Data xmlns:cc="http://www.netvoxlab.ru/ReDoc/Workflow/SimpleCallCenterTask" xsi:type="cc:SimpleCallCenterTaskData">
+			<cc:Title>Сообщить о результате заявителю</cc:Title>
+			<cc:Duration>1wd</cc:Duration>
+			<cc:MessageVar>SendMessage</cc:MessageVar>
+			<cc:AutoSmsSendingRegex>ID.*\.PDF</cc:AutoSmsSendingRegex>
+		</Data>
+	</Step>
+	
+	<Step Name="MVDCriminal3">
+		<Transition Title="Готово" To="decision_result" />
+		<Data xmlns:df="http://www.netvoxlab.ru/ReDoc/Workflow/DynamicForm" xsi:type="df:DynamicFormData">
+			<df:IdRef>MVD_criminal_3.0_3_new</df:IdRef>
+			<df:Title>Заполнить форму о выдаче результата (МВД - судимость)</df:Title>
+			<df:Duration>90wd</df:Duration>
+		</Data>
+	</Step>	
+	
+	<Step xsi:type="Decision" Name="decision_result">
+		<Transition Title="1" To="ApplicationProcessingEnded">
+			<Condition>
+				<Expression>"yes" == MVDCriminal3.request.TypeAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Transition Title="2" To="mkgu">
+			<Condition>
+				<Expression>"no" == MVDCriminal3.request.TypeAnswer</Expression>
+			</Condition>
+		</Transition>
+		<Data />
+	</Step>
+	
+	<Step Name="ApplicationProcessingEnded">
+        <Transition Title="Далее" To="form3" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicationProcessingEnded Результат готов к выдаче</fs:Description>
+                <fs:MfcServiceStatus>ApplicationProcessingEnded</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+	
+	<Step Name="form3">
+		<Transition Title="Получить расписку" To="ApplicantGotResult" />
+		<Data xmlns:rn="http://www.netvoxlab.ru/ReDoc/Workflow/ResultNote" xsi:type="rn:ResultNoteData">
+			<rn:Title>Выдать результат заявителю</rn:Title>
+			<rn:Duration>43200</rn:Duration>
+			<rn:XMLTemplate>
+				<![CDATA[<document> 
+	<TypeMFCInfo1>
+		<name_mfc>#if (${DepartmentConfig.DepartmentName})${DepartmentConfig.DepartmentName}#end</name_mfc>
+		<address_mfc>#if (${DepartmentConfig.DepartmentAddress})${DepartmentConfig.DepartmentAddress}#end</address_mfc>
+		<email_mfc>#if (${DepartmentConfig.DepartmentEmail})${DepartmentConfig.DepartmentEmail}#end</email_mfc>
+		<phone_mfc>#if (${DepartmentConfig.DepartmentPhone})${DepartmentConfig.DepartmentPhone}#end</phone_mfc> 
+	</TypeMFCInfo1>
+	<DepartmentPhone>#if (${TemplateApplication.DepartmentPhone})${TemplateApplication.DepartmentPhone}#end</DepartmentPhone>
+	<DepartmentName>#if (${TemplateApplication.DepartmentName})${TemplateApplication.DepartmentName}#end</DepartmentName>
+	<Gender>#if (${Customer.Gender})${Customer.Gender}#end</Gender>
+	<CustomerType>#if (${Customer.CustomerType})${Customer.CustomerType}#end</CustomerType>
+	<TypeBenefitType1>
+		<type_benefit>#if (${TemplateApplication.serviceFullName})${TemplateApplication.serviceFullName}#end</type_benefit>
+	</TypeBenefitType1>
+	<TypeApplicantInfo1>
+    <surname_applicant>#if (${Customer.Name.Last})${Customer.Name.Last}#end</surname_applicant>
+    <name_applicant>#if (${Customer.Name.First})${Customer.Name.First}#end</name_applicant>
+    <patronymic_applicant>#if (${Customer.Name.Middle})${Customer.Name.Middle}#end</patronymic_applicant>
+  </TypeApplicantInfo1>
+  <TypeApplicantULInfo1>
+    <full_name_ul>#if (${Customer.CompanyFullName})${Customer.CompanyFullName}#end</full_name_ul>
+    <surname_pred>#if (${Customer.RepresentativeName.Last})${Customer.RepresentativeName.Last}#end</surname_pred>
+    <name_pred>#if (${Customer.RepresentativeName.First})${Customer.RepresentativeName.First}#end</name_pred>
+    <patronymic_pred>#if (${Customer.RepresentativeName.Middle})${Customer.RepresentativeName.Middle}#end</patronymic_pred>
+  </TypeApplicantULInfo1>
+  <TypeAdditInfo1>
+    <date_application>#if (${DateNow})${DateNow}#end</date_application>
+    <operator>#if (${CurrentUserName})${CurrentUserName}#end</operator>
+  </TypeAdditInfo1>
+  <createdAt>#if (${FileInfo.CreatedAt})${FileInfo.CreatedAt}#end</createdAt>
+  <identificator>#if (${FileInfo.Identificator})${FileInfo.Identificator}#end</identificator>
+  <attachments>
+  #foreach ($attach in $Attachs)
+  #each
+    <item size="${attach.CountPage}" isOrigin="${attach.IsOrigin}">${attach.Title}</item>
+  #end
+  </attachments>
+</document>]]>
+			</rn:XMLTemplate>
+			<rn:XSLTIdRef>PDF_RECEIPT_OUT_31</rn:XSLTIdRef>
+		</Data>
+	</Step>
+	
+	<Step Name="ApplicantGotResult">
+        <Transition Title="Далее" To="mkgu" />
+        <Data xmlns:fs="http://www.netvoxlab.ru/ReDoc/Workflow/FileDataSetter" xsi:type="fs:FileDataSetterData">
+            <fs:CommonInfo>
+                <fs:Description>Дело, в котором статус ApplicantGotResult Заявитель получил результат</fs:Description>
+                <fs:MfcServiceStatus>ApplicantGotResult</fs:MfcServiceStatus>
+            </fs:CommonInfo>
+        </Data>
+    </Step>
+
+	<Step Name="mkgu">
+		<Transition To="createRequest2" Title="Инициация оценки" />
+		<Data xmlns:st="http://www.netvoxlab.ru/ReDoc/Workflow/MkguTask" xsi:type="st:MkguTaskData">
+			<st:Title>Инициация оценки</st:Title> 
+			<st:Duration>60</st:Duration>
+			<st:Ask>true</st:Ask>
+			<st:XMLTemplate>
+				<![CDATA[<document>
+		<AuthorizationKey>#if (${Card.AuthorizationKey})${Card.AuthorizationKey}#end</AuthorizationKey>
+		<DeclarantName>#if (${Card.DeclarantName})${Card.DeclarantName}#end</DeclarantName>
+		<StartServiceDate>#if (${Card.StartServiceDate})${Card.StartServiceDate}#end</StartServiceDate>
+		<ServiceName>#if (${Card.ServiceName})${Card.ServiceName}#end</ServiceName>
+		<SubServiceName>#if (${Card.SubServiceName})${Card.SubServiceName}#end</SubServiceName>
+		<DepartmentName>#if (${Card.DepartmentName})${Card.DepartmentName}#end</DepartmentName>
+		<CurrentDate>#if (${Card.CurrentDate})${Card.CurrentDate}#end</CurrentDate>
+		</document>]]>
+			</st:XMLTemplate>    
+			<st:XSLTIdRef>MKGU_CARD</st:XSLTIdRef>
+		</Data>
+	</Step>
+
+	<!-- формирование вторичного запроса -->
+	<Step Name="createRequest2">
+		<Transition Title="Далее" To="sendRequest2" />
+		<Data xsi:type="vt:VelocityTemplateData" xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate">
+			<vt:Template>
+				<![CDATA[<?xml version="1.0" encoding="utf-8"?>
+	<CriminalRecordRequest xmlns="urn://x-artefacts-mvd-gov-ru/giac-criminal-record/root/1.0.3">
+	  <DocumentProcessed Date= "#if ("$!sendRequestCriminalRecordResponse.Response.attr.Date" !="")${sendRequestCriminalRecordResponse.Response.attr.Date}#else${sendRequest_ytochCriminalRecordResponse.Response.attr.Date}#end" ResponseNumber="#if ("$!sendRequestCriminalRecordResponse.Response.attr.ResponseNumber" !="")${sendRequestCriminalRecordResponse.Response.attr.ResponseNumber}#else${sendRequest_ytochCriminalRecordResponse.Response.attr.ResponseNumber}#end">
+		#if ($MVDCriminal3.request.TypeAnswer == "yes")<Taken/>#end
+	   #if ($MVDCriminal3.request.TypeAnswer == "no")<Returned>031</Returned>#end
+	  </DocumentProcessed>
+	</CriminalRecordRequest>]]>
+			</vt:Template>
+			<vt:SetVariable>MVD_Criminal_SOAPRequest2.xml</vt:SetVariable>
+		</Data>
+	</Step>
+
+	<!-- отправка запроса -->
+	<Step Name="sendRequest2"> 
+		<Transition Title="Далее" To="pdf3" />	
+		<Data xmlns:send="http://www.netvoxlab.ru/ReDoc/Workflow/SendSoap" xsi:type="send:SendSoapData">
+			<send:TaskTitle>Отправить сведения  (МВД - судимость)</send:TaskTitle>
+			<send:Duration>480</send:Duration>
+			<send:VariableWithRequest>MVD_Criminal_SOAPRequest2.xml</send:VariableWithRequest>
+			<send:SaveResponseToVariable>MVD_Criminal_SOAPResponse2.xml</send:SaveResponseToVariable>
+			<!--<send:Endpoint>http://smev3-n0.test.gosuslugi.ru:7500/ws</send:Endpoint> адрес теста -->
+			<send:Endpoint>http://172.20.3.12:7500/ws</send:Endpoint>
+			<!-- адрес прода-->
+			<send:SaopAction>urn:SendRequest</send:SaopAction>
+			<send:SignOV/>
+			<send:CheckResponseSign>false</send:CheckResponseSign>
+			<send:MR>MR300</send:MR>
+			<send:ReadResponse send:Variable="SmevMessageType" send:XPath=".//ns2:MessageMetadata/ns2:MessageType">
+				<send:Namespace send:Uri="urn://x-artefacts-smev-gov-ru/services/message-exchange/types/1.1" send:Alias="ns2"/>
+			</send:ReadResponse>
+			<send:ReadResponse send:Variable="Fault" send:XPath=".//s:Fault/faultstring">
+				<send:Namespace send:Uri="http://schemas.xmlsoap.org/soap/envelope/" send:Alias="s"/>
+			</send:ReadResponse>
+			<send:SuccessCondition>
+				<![CDATA[(SmevMessageType == "REQUEST")]]>
+			</send:SuccessCondition> 
+			<send:Autorun>true</send:Autorun>
+			<send:AutoRepeat>false</send:AutoRepeat>
+			<!-- <send:IsTestMessage>true</send:IsTestMessage>
+			 на проде этот тэг убрать -->
+		</Data>
+	</Step> 
+	
+	<!-- тестирование велосити -->
+	<Step Name="debug">
+		<Transition Title="Далее" To="null" />
+		<Data xmlns:vt="http://www.netvoxlab.ru/ReDoc/Workflow/VelocityTemplate" xsi:type="vt:VelocityTestData" />
+	</Step> 
+	
+	<Step Name="pdf3">
+		<Transition To="ApplicationClosed" Title="1" />
+		<Data xmlns:pdf="http://www.netvoxlab.ru/ReDoc/Workflow/GeneratePdf" xsi:type="pdf:GeneratePdfData">
+			<pdf:XSLTTemplateId>MVD_Criminal_SOAPResponse_new</pdf:XSLTTemplateId>
+			<pdf:AttachNameWithDataXML>MVD_Criminal_SOAPResponse2.xml</pdf:AttachNameWithDataXML>
+			<pdf:OutputAttach>МВД. Подтверждение обработки запроса.PDF</pdf:OutputAttach>
+			<pdf:AddContextVariables>true</pdf:AddContextVariables>
+		</Data>
+	</Step>
+	
+	
+</Process> 
