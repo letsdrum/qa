@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="X-UA-Compatible" content="ie=edge">
+            <title>Chat log from mfc44.ru</title>
+            <style>
+                h1 {
+                    display: block;
+                    margin: 15px auto;
+                    text-align: center;
+                    width: 600px;
+                }
+                .wrap {
+                    display: flex;
+                    flex-direction: column;
+                    width: 600px;
+                    margin: 0 auto;
+                }
+                .message {
+                    display: block;
+                    max-width: 100%;
+                    min-width: 40px;
+                    margin-bottom: 2px;
+                    overflow: hidden;
+                    word-wrap: break-word;
+                    text-indent: 0;
+                    user-select: text;
+                    border-radius: 5px;
+                }
+                .message a {
+                    color: inherit;
+                }
+                .messageInfo {
+                    opacity: 0.7;
+                }
+                .clientMessageWrap {
+                    background-color: #18c139;
+                    color: white;
+                    padding: 12px 16px 12px 16px;
+                    max-width: 70%;
+                    overflow: hidden;
+                    word-wrap: break-word;
+                    line-height: @mainLine;
+                    text-indent: 0;
+                    user-select: text;
+                    box-sizing: border-box;
+                    margin: 0 0 0 auto;
+                }
+                .agentMessageWrap {
+                    background-color: #f1f0f0;
+                    color: #222d38;
+                    padding: 12px 16px 12px 16px;
+                    max-width: 70%;
+                    overflow: hidden;
+                    word-wrap: break-word;
+                    line-height: @mainLine;
+                    text-indent: 0;
+                    user-select: text;
+                    box-sizing: border-box;
+                    margin: 0 auto 0 0;
+                }
+                .printButton {
+                    position: fixed;
+                    top: 13px;
+                    right: 30px;
+                    background-color: #18c139;
+                    color: white;
+                    width: 80px;
+                    height: 40px;
+                    border-radius: 5px;
+                    font-size: 20px;
+                    box-shadow: none;
+                }
+                .printButton:hover {
+                    background-color: #12a730;
+                }
+                @media print {
+                    .printButton {
+                        display: none;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Chat log from mfc44.ru</h1>
+            <button class="printButton" onclick="window.print()">Print</button>
+            <div class="wrap">
+                <div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:26:53, you</span>
+                <br>
+                <span>Здравствуйте. Меня зовут Вербин Сергей, я один из тестировщиков 
+ mfc44.ru В данный момент тестирую данную функцию. Жду от Вас ответа.</span>
+            </div>
+            <br><div class="message agentMessageWrap">
+                <span class="messageInfo">26.02.2020 16:27:39, чат☼ ()</span>
+                <br>
+                <span>Даю ответ.
+Алексей</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:28:44, you</span>
+                <br>
+                <span>Сейчас будет тестовое сообщение</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:28:58, you</span>
+                <br>
+                <span>;!";"УЙЦВЛФЫЩЗСБФСБЕЪЙЦАФЫСЫСЯЧСЯСЯЧСЙЦ//ФЫС/Фыс\//ЙФМ/Ч/ЯЧ/С//Е/Й/С/ЯЧ/С//ЙЦА/Ф/С/С/ЯС//,,СЯЧ/МЯ,/,Ф/Й/ВФ/ВФЫ,А/ЙЦ,Е/Й,А/Ф,СМ/ЫЧ,С/Й,Й/ЦА,Ф/ЫС,/,С№№%;!"BFQBFOKASCMPL#O@{%RF</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:07, you</span>
+                <br>
+                <span>\u84255</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:50, you</span>
+                <br>
+                <span>Не могли бы Вы отправить последние 2 сообщения, не включая этого?</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:54, you</span>
+                <br>
+                <span> 😇 </span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:56, you</span>
+                <br>
+                <span> 😕 </span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:57, you</span>
+                <br>
+                <span> 😈 </span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:29:59, you</span>
+                <br>
+                <span> 😞 </span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:30:00, you</span>
+                <br>
+                <span> 😘 </span>
+            </div>
+            <br><div class="message agentMessageWrap">
+                <span class="messageInfo">26.02.2020 16:30:31, чат☼ ()</span>
+                <br>
+                <span>;!";"УЙЦВЛФЫЩЗСБФСБЕЪЙЦАФЫСЫСЯЧСЯСЯЧСЙЦ//ФЫС/Фыс\//ЙФМ/Ч/ЯЧ/С//Е/Й/С/ЯЧ/С//ЙЦА/Ф/С/С/ЯС//,,СЯЧ/МЯ,/,Ф/Й/ВФ/ВФЫ,А/ЙЦ,Е/Й,А/Ф,СМ/ЫЧ,С/Й,Й/ЦА,Ф/ЫС,/,С№№%;!"BFQBFOKASCMPL#O@{%RF
+\u84255</span>
+            </div>
+            <br><div class="message agentMessageWrap">
+                <span class="messageInfo">26.02.2020 16:30:36, чат☼ ()</span>
+                <br>
+                <span>так?</span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:30:41, you</span>
+                <br>
+                <span>Спасибо. </span>
+            </div>
+            <br><div class="message clientMessageWrap">
+                <span class="messageInfo">26.02.2020 16:30:43, you</span>
+                <br>
+                <span>Да, всё так.</span>
+            </div>
+            <br>
+            </div>
+        </body>
+        </html>
